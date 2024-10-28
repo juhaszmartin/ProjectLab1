@@ -1,6 +1,9 @@
 import itertools
 from typing import List, Tuple, Dict, FrozenSet
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 def generate_coalitions(players: List[int]) -> List[FrozenSet[int]]:
@@ -133,52 +136,132 @@ def print_expected_utilities(expected_utils: Dict[Tuple[FrozenSet[int], int], fl
         print(f"  Coalition {set(coalition)}, Player {player}: Expected Utility = {util:.4f}")
 
 
+def visualize_stable_alpha_ranges(df, parameter_combinations):
+    """
+    Generate a grid of plots showing the stable alpha ranges for eta=1 and eta=10.
+    """
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    sns.set_theme(style="whitegrid")
+    eta_values = [1, 10]  # The two eta values to compare
+
+    # Create a figure with 10 rows and 2 columns
+    fig, axes = plt.subplots(nrows=8, ncols=2, figsize=(15, 50))
+    fig.tight_layout(pad=1.0)
+
+    for idx, (v1, v2, V) in enumerate(parameter_combinations):
+        for col_idx, eta in enumerate(eta_values):
+            ax = axes[idx, col_idx]
+            df_subset = df[(df["v1"] == v1) & (df["v2"] == v2) & (df["V"] == V) & (df["eta"] == eta) & (df["stable"] == True)]
+            if df_subset.empty:
+                ax.text(0.5, 0.5, "No stable alpha1 values", horizontalalignment="center", verticalalignment="center")
+                ax.set_title(f"eta={eta}, v1={v1}, v2={v2}, V={V}")
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                continue
+            # Plot stable alpha1 values
+            stable_alpha1 = df_subset["alpha1"]
+            ax.plot(stable_alpha1, [0.5] * len(stable_alpha1), "o", color="blue")
+            ax.set_title(f"eta={eta}, v1={v1}, v2={v2}, V={V}")
+            ax.set_xlabel("alpha1")
+            ax.set_yticks([])
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+    plt.show()
+
+
+def main_visual():
+    N = 2
+    eta_values = [1, 10]  # Values of eta to compare
+    step_size = 0.05
+    # singleton_payoffs = [1.0, 1.5, 2.0]  # Adjusted for selected combinations
+    # grand_payoffs = [2.0, 2.5, 3.0]
+    alpha_values = np.arange(0, 1.05, step_size)
+
+    # Define 10 parameter combinations for v1, v2, V
+    parameter_combinations = [
+        (1.0, 1.0, 2.0),
+        (1.0, 1.5, 2.5),
+        (1.0, 2.0, 3.0),
+        (1.5, 1.0, 2.5),
+        (1.5, 1.5, 3.0),
+        (2.0, 1.0, 3.0),
+        (2.0, 2.0, 2.5),
+        (1.0, 1.0, 5.0),
+    ]
+
+    data_records = []
+
+    for eta in eta_values:
+        print(f"Processing eta={eta}...")
+        for v1, v2, V in parameter_combinations:
+            for alpha1 in alpha_values:
+                alpha2 = 1 - alpha1
+                mu = {
+                    frozenset({1}): [(1.0, 0.5), (v1, 0.5)],
+                    frozenset({2}): [(1.0, 0.5), (v2, 0.5)],
+                    frozenset({1, 2}): [(V, 1.0)],
+                }
+                sharing_rules = {
+                    frozenset({1}): {1: 1.0},
+                    frozenset({2}): {2: 1.0},
+                    frozenset({1, 2}): {1: alpha1, 2: alpha2},
+                }
+                stable, _ = is_grand_coalition_stable(N, eta, mu, sharing_rules)
+                data_records.append({"eta": eta, "v1": v1, "v2": v2, "V": V, "alpha1": alpha1, "stable": stable})
+
+    df = pd.DataFrame(data_records)
+    visualize_stable_alpha_ranges(df, parameter_combinations)
+
+
 def main():
     N = 2
-    eta = 1  # Risk aversion parameter (adjust as needed)
-
+    # eta = 1  # Risk aversion parameter (adjust as needed)
+    eta_values = np.arange(0.0, 11, step=1)  # From 0 to 10
     step_size = 0.05
     # Define ranges
-    singleton_payoffs = np.arange(1, 2.05, step_size)  # From 0.1 to 1.0
-    grand_payoffs = np.arange(1, 3.05, step_size)  # From 0.1 to 2.0
-    alpha_values = np.arange(0, 1.05, step_size)  # From 0.1 to 0.9
+    singleton_payoffs = np.arange(1, 2.05, step_size)  # From 0.1 to 2.0
+    grand_payoffs = np.arange(1, 3.05, step_size)  # From 0.1 to 3.0
+    alpha_values = np.arange(0, 1.05, step_size)  # From 0 to 1
 
     # Initialize a dictionary to store stable alphas for each payoff combination
     stable_alpha_dict = {}
 
     # Loop over all combinations
-    for v1 in singleton_payoffs:
-        for v2 in singleton_payoffs:
-            for V in grand_payoffs:
-                for alpha1 in alpha_values:
-                    alpha2 = 1 - alpha1
-                    # Define characteristic function mu
-                    mu = {
-                        frozenset({1}): [(1.0, 0.5), (v1, 0.5)],
-                        frozenset({2}): [(1.0, 0.5), (v2, 0.5)],
-                        frozenset({1, 2}): [(V, 1.0)],
-                    }
-                    # Define sharing rules
-                    sharing_rules = {
-                        frozenset({1}): {1: 1.0},
-                        frozenset({2}): {2: 1.0},
-                        frozenset({1, 2}): {1: alpha1, 2: alpha2},
-                    }
-                    # Calculate expected utilities
-                    # expected_utils = calculate_all_expected_utilities(N, eta, mu, sharing_rules, shift_constant)
-                    # Check stability
-                    stable, report = is_grand_coalition_stable(N, eta, mu, sharing_rules)
-                    # If stable, record alpha1 for this payoff combination
-                    payoff_key = (v1, v2, V)
-                    if payoff_key not in stable_alpha_dict:
-                        stable_alpha_dict[payoff_key] = []
-                    if stable:
-                        stable_alpha_dict[payoff_key].append(alpha1)
+    for eta in eta_values:
+        for v1 in singleton_payoffs:
+            for v2 in singleton_payoffs:
+                for V in grand_payoffs:
+                    for alpha1 in alpha_values:
+                        alpha2 = 1 - alpha1
+                        # Define characteristic function mu
+                        mu = {
+                            frozenset({1}): [(1.0, 0.5), (v1, 0.5)],
+                            frozenset({2}): [(1.0, 0.5), (v2, 0.5)],
+                            frozenset({1, 2}): [(V, 1.0)],
+                        }
+                        # Define sharing rules
+                        sharing_rules = {
+                            frozenset({1}): {1: 1.0},
+                            frozenset({2}): {2: 1.0},
+                            frozenset({1, 2}): {1: alpha1, 2: alpha2},
+                        }
+                        # Calculate expected utilities
+                        # expected_utils = calculate_all_expected_utilities(N, eta, mu, sharing_rules, shift_constant)
+                        # Check stability
+                        stable, report = is_grand_coalition_stable(N, eta, mu, sharing_rules)
+                        # If stable, record alpha1 for this payoff combination
+                        payoff_key = (eta, v1, v2, V)
+                        if payoff_key not in stable_alpha_dict:
+                            stable_alpha_dict[payoff_key] = []
+                        if stable:
+                            stable_alpha_dict[payoff_key].append(alpha1)
 
     # After collecting all stable alphas, print the results
     print("\n=== Range of alpha1 Values for Grand Coalition Stability ===\n")
     for payoff_key, alphas in sorted(stable_alpha_dict.items()):
-        v1, v2, V = payoff_key
+        eta, v1, v2, V = payoff_key
         if alphas:
             alphas_sorted = sorted(alphas)
             # Determine continuous ranges
@@ -196,10 +279,10 @@ def main():
             ranges.append((start, end))
             # Format ranges for display
             range_str = ", ".join([f"{start:.2f}-{end:.2f}" if start != end else f"{start:.2f}" for start, end in ranges])
-            print(f"Payoffs: v1={v1:.2f}, v2={v2:.2f}, V={V:.2f} => Stable alpha1 Range(s): {range_str}")
+            print(f"Eta={eta} Payoffs: v1={v1:.2f}, v2={v2:.2f}, V={V:.2f} => Stable alpha1 Range(s): {range_str}")
         else:
-            print(f"Payoffs: v1={v1:.2f}, v2={v2:.2f}, V={V:.2f} => No stable alpha1 values.")
+            print(f"Eta={eta} Payoffs: v1={v1:.2f}, v2={v2:.2f}, V={V:.2f} => No stable alpha1 values.")
 
 
 if __name__ == "__main__":
-    main()
+    main_visual()
