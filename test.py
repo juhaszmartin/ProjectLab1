@@ -29,7 +29,17 @@ def expected_utility(
     exp_util = 0.0
     for payoff, prob in mu_S:
         # Allocate share based on sharing rule
-        share = sharing_rule.get(player, 0.0) * payoff
+        share = (
+            sharing_rule.get(
+                player,
+            )
+            * payoff
+        )
+        # print(f"payoff: {payoff}")
+        # print(f"prob: {prob}")
+        # print(f"player: {player}")
+        # print(f"sharing_rule: {sharing_rule}")
+        # print(f"share: {share}")
         # Compute utility: handle share <= 0
         if share > 0:
             if eta != 1:
@@ -105,6 +115,8 @@ def is_grand_coalition_stable(
     stable = True
     report = "Grand coalition is stable.\n"
 
+    epsilon = 1e-8  # Tolerance for floating-point comparisons
+
     for player in players:
         eu_grand = grand_utils[player]
         # Find maximum expected utility in any other coalition
@@ -114,11 +126,13 @@ def is_grand_coalition_stable(
                 eu = expected_utils.get((coalition, player), float("-inf"))
                 if eu > max_eu_other:
                     max_eu_other = eu
-        # Compare grand coalition utility with max in other coalitions
-        if eu_grand < max_eu_other:
+        # Compare grand coalition utility with max in other coalitions using epsilon
+        if eu_grand + epsilon < max_eu_other:
             stable = False
-            report = "Grand coalition is NOT stable.\n"
+            report = f"Grand coalition is NOT stable.\n"
             report += f"Player {player} can achieve higher utility ({max_eu_other:.4f}) in another coalition than in the grand coalition ({eu_grand:.4f}).\n"
+            # Break early since we've found instability
+            break
 
     return stable, report
 
@@ -139,6 +153,8 @@ def print_expected_utilities(expected_utils: Dict[Tuple[FrozenSet[int], int], fl
 def visualize_stable_alpha_ranges(df, parameter_combinations):
     """
     Generate a grid of plots showing the stable alpha ranges for eta=1 and eta=10.
+    Keep titles on all plots and remove x-axis numbers except on the bottom plots.
+    Adjust subplot parameters as specified.
     """
     import matplotlib.pyplot as plt
     import seaborn as sns
@@ -146,28 +162,45 @@ def visualize_stable_alpha_ranges(df, parameter_combinations):
     sns.set_theme(style="whitegrid")
     eta_values = [1, 10]  # The two eta values to compare
 
-    # Create a figure with 10 rows and 2 columns
-    fig, axes = plt.subplots(nrows=8, ncols=2, figsize=(15, 50))
-    fig.tight_layout(pad=1.0)
+    num_params = len(parameter_combinations)
+    # Create a figure with n rows and 2 columns
+    fig, axes = plt.subplots(nrows=num_params, ncols=2, figsize=(12, num_params * 2.5))
+
+    # Adjust the spacing and margins between subplots using your specified parameters
+    plt.subplots_adjust(top=0.936, bottom=0.141, left=0.024, right=0.976, hspace=0.55, wspace=0.071)
 
     for idx, (v1, v2, V) in enumerate(parameter_combinations):
         for col_idx, eta in enumerate(eta_values):
             ax = axes[idx, col_idx]
             df_subset = df[(df["v1"] == v1) & (df["v2"] == v2) & (df["V"] == V) & (df["eta"] == eta) & (df["stable"] == True)]
             if df_subset.empty:
-                ax.text(0.5, 0.5, "No stable alpha1 values", horizontalalignment="center", verticalalignment="center")
-                ax.set_title(f"eta={eta}, v1={v1}, v2={v2}, V={V}")
-                ax.set_xlim(0, 1)
-                ax.set_ylim(0, 1)
-                continue
-            # Plot stable alpha1 values
-            stable_alpha1 = df_subset["alpha1"]
-            ax.plot(stable_alpha1, [0.5] * len(stable_alpha1), "o", color="blue")
-            ax.set_title(f"eta={eta}, v1={v1}, v2={v2}, V={V}")
-            ax.set_xlabel("alpha1")
+                ax.text(
+                    0.5,
+                    0.5,
+                    "No stable alpha1 values",
+                    horizontalalignment="center",
+                    verticalalignment="center",
+                    fontsize=10,
+                    transform=ax.transAxes,
+                )
+            else:
+                # Plot stable alpha1 values
+                stable_alpha1 = df_subset["alpha1"]
+                ax.plot(stable_alpha1, [0.5] * len(stable_alpha1), "o", color="blue")
+            # Set titles with parameters
+            ax.set_title(f"eta={eta}, v1={v1}, v2={v2}, V={V}", fontsize=10, pad=10)
+            # Remove x-axis tick labels for non-bottom plots
+            if idx != num_params - 1:
+                ax.tick_params(labelbottom=False)
+            else:
+                ax.set_xlabel("alpha1", fontsize=9)
+            # Remove y-axis ticks
             ax.set_yticks([])
             ax.set_xlim(0, 1)
             ax.set_ylim(0, 1)
+    # Add a super title for the entire figure
+    fig.suptitle("Stable alpha1 Values for Different Parameters", fontsize=16, y=0.99)
+    # No need for plt.tight_layout() since we're using plt.subplots_adjust()
     plt.show()
 
 
@@ -282,6 +315,29 @@ def main():
             print(f"Eta={eta} Payoffs: v1={v1:.2f}, v2={v2:.2f}, V={V:.2f} => Stable alpha1 Range(s): {range_str}")
         else:
             print(f"Eta={eta} Payoffs: v1={v1:.2f}, v2={v2:.2f}, V={V:.2f} => No stable alpha1 values.")
+
+
+def test():
+    step_size = 0.05
+    alpha_values = np.array([0.2, 0.5, 0.8])  # From 0 to 1
+    for alpha1 in alpha_values:
+        alpha2 = 1 - alpha1
+        mu = {
+            frozenset({1}): [(1.0, 0.5), (1, 0.5)],
+            frozenset({2}): [(1.0, 0.5), (1, 0.5)],
+            frozenset({1, 2}): [(5, 1.0)],
+        }
+        # Define sharing rules
+        sharing_rules = {
+            frozenset({1}): {1: 1.0},
+            frozenset({2}): {2: 1.0},
+            frozenset({1, 2}): {1: alpha1, 2: alpha2},
+        }
+        # asd = expected_utility(
+        #    player=1, coalition=frozenset({1, 2}), mu_S=mu.get(frozenset({1, 2}), []), sharing_rule={1: 0.45, 2: 0.55}, eta=1
+        # )
+        # print(asd)
+        print(is_grand_coalition_stable(2, 1, mu, sharing_rules))
 
 
 if __name__ == "__main__":
