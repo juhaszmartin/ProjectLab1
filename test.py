@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from functools import lru_cache
 
 
 def generate_coalitions(players: List[int]) -> List[FrozenSet[int]]:
@@ -19,6 +20,7 @@ def generate_coalitions(players: List[int]) -> List[FrozenSet[int]]:
     return coalitions
 
 
+# @lru_cache
 def expected_utility(
     player: int,
     coalition: FrozenSet[int],
@@ -53,7 +55,11 @@ def expected_utility(
                 utility = -1e10  # Assign a large negative utility
         else:
             # share < 0, which should not happen
-            raise ValueError(f"Negative share encountered: {share}")
+            raise ValueError(
+                f"Negative share encountered: {share}, {payoff}, {sharing_rule.get(
+                player,
+            )}"
+            )
         exp_util += prob * utility
     return exp_util
 
@@ -207,11 +213,10 @@ def visualize_stable_alpha_ranges(df, parameter_combinations):
 def main_visual():
     N = 2
     eta_values = [1, 10]  # Values of eta to compare
-    step_size = 0.05
+    step_size = 0.01
     # singleton_payoffs = [1.0, 1.5, 2.0]  # Adjusted for selected combinations
     # grand_payoffs = [2.0, 2.5, 3.0]
-    alpha_values = np.arange(0, 1.05, step_size)
-
+    alpha_values = np.arange(0, 1.0 + step_size / 2, step_size)
     # Define 10 parameter combinations for v1, v2, V
     parameter_combinations = [
         (1.0, 1.0, 2.0),
@@ -254,8 +259,8 @@ def main():
     eta_values = np.arange(0.0, 11, step=1)  # From 0 to 10
     step_size = 0.05
     # Define ranges
-    singleton_payoffs = np.arange(1, 2.05, step_size)  # From 0.1 to 2.0
-    grand_payoffs = np.arange(1, 3.05, step_size)  # From 0.1 to 3.0
+    singleton_payoffs = np.arange(0.5, 5.15, step_size)  # From 0.1 to 2.0
+    grand_payoffs = np.arange(4, 4.05, step_size)  # From 0.1 to 3.0
     alpha_values = np.arange(0, 1.05, step_size)  # From 0 to 1
 
     # Initialize a dictionary to store stable alphas for each payoff combination
@@ -341,4 +346,4 @@ def test():
 
 
 if __name__ == "__main__":
-    main_visual()
+    main()
