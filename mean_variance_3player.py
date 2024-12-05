@@ -1,9 +1,10 @@
 import itertools
-from typing import List, Tuple, Dict, FrozenSet
+from typing import List, Tuple, Dict, FrozenSet, Optional
 import numpy as np
 import matplotlib.pyplot as plt
 import mplcursors
 from tqdm import tqdm
+from scipy.optimize import brentq
 
 
 def generate_coalitions(players: List[int]) -> List[FrozenSet[int]]:
@@ -44,43 +45,30 @@ def calculate_utilities(
     return utilities
 
 
-def find_alpha_required(utility_grand: float, mu_pair: float, sigma2_pair: float, eta: float) -> float:
+def find_alpha_required(utility_grand: float, mu_pair: float, sigma2_pair: float, eta: float) -> Optional[float]:
     """
     Solve for alpha' in the pair coalition that gives the target player at least
-    their grand coalition utility.
-
-    U = alpha' * mu_pair - (eta / 2) * (alpha')^2 * sigma2_pair >= utility_grand
-
+    their grand coalition utility using the complex utility function.
     Returns the minimal alpha' that satisfies the inequality within [0,1].
     If no such alpha' exists, returns None.
     """
-    a = -(eta / 2) * sigma2_pair
-    b = mu_pair
-    c = -utility_grand
 
-    discriminant = b**2 - 4 * a * c
+    def utility_diff(alpha):
+        return mean_variance_utility(alpha, mu_pair, sigma2_pair, eta) - utility_grand
 
-    if discriminant < 0:
-        return None  # No real solution
-
-    sqrt_D = np.sqrt(discriminant)
-
-    # Since a < 0, the quadratic opens downward.
-    # We need alpha' >= the smaller root to satisfy U >= utility_grand
-    alpha1 = (-b + sqrt_D) / (2 * a)
-    alpha2 = (-b - sqrt_D) / (2 * a)
-
-    # Sort roots
-    alpha_min = min(alpha1, alpha2)
-    alpha_max = max(alpha1, alpha2)
-
-    # Feasible alpha' should be >= alpha_min
-    if alpha_min >= 0 and alpha_min <= 1:
-        return alpha_min
-    elif alpha_max >= 0 and alpha_max <= 1:
-        return alpha_max
-    else:
+    # Check if utility at alpha=1 is less than utility_grand
+    if utility_diff(1.0) < 0:
         return None  # No feasible alpha' within [0,1]
+    # Check if utility at alpha=0 is greater than utility_grand
+    if utility_diff(0.0) >= 0:
+        return 0.0  # Minimum alpha' is 0
+
+    # Find the root in the interval [0,1]
+    try:
+        alpha_required = brentq(utility_diff, 0.0, 1.0)
+        return alpha_required
+    except ValueError:
+        return None  # No root found in [0,1]
 
 
 def is_grand_coalition_stable(
@@ -120,7 +108,9 @@ def is_grand_coalition_stable(
     player_pairs = list(itertools.combinations(players, 2))
     for pair in player_pairs:
         pair_coalition = frozenset(pair)
-        pair_mu, pair_sigma2 = mu.get(pair_coalition, (0.0, 0.0))
+        if pair_coalition not in mu:
+            continue  # Skip if pair coalition data is not available
+        pair_mu, pair_sigma2 = mu[pair_coalition]
         player_i, player_j = pair
 
         utility_i_grand = grand_utils[player_i]
@@ -129,30 +119,22 @@ def is_grand_coalition_stable(
         # Find the minimal alpha_i' that gives player_i at least their grand utility
         alpha_i_required = find_alpha_required(utility_i_grand, pair_mu, pair_sigma2, eta)
 
-        if alpha_i_required is None:
-            # No feasible alpha_i' to satisfy player_i's utility
+        if alpha_i_required is None or alpha_i_required > 1.0:
             continue  # Cannot deviate in this pair
 
-        if alpha_i_required > 1.0:
-            # Cannot assign more than 100% share
-            continue  # Cannot deviate in this pair
-
-        # Assign remaining share to player_j
         alpha_j = 1.0 - alpha_i_required
 
-        # Calculate utilities in the pair coalition
-        # utility_i = mean_variance_utility(alpha_i_required, pair_mu, pair_sigma2, eta)
+        # Check if player_j can get at least their grand utility
         utility_j = mean_variance_utility(alpha_j, pair_mu, pair_sigma2, eta)
 
-        if (utility_j > utility_j_grand) and not (np.isclose(utility_j, utility_j_grand, rtol=0.005)):
+        if utility_j >= utility_j_grand:
             # Both players can achieve at least their grand coalition utilities
-            # print(f"Players {player_i} and {player_j} can deviate together.")
-            # print(f"Player {player_i}: alpha={alpha_i_required}")
-            # print(f"Player {player_j}: alpha={alpha_j}, utility={utility_j} >= {utility_j_grand}")
+            print(f"Players {player_i} and {player_j} can deviate together.")
+            print(f"Player {player_i}: alpha={alpha_i_required}")
+            print(f"Player {player_j}: alpha={alpha_j}, utility={utility_j} >= {utility_j_grand}")
             return False  # Grand coalition is not stable
 
-    # If no deviations are found, the grand coalition is stable
-    return True
+    return True  # No deviations found; grand coalition is stable
 
 
 def generate_simplex_grid(step_size: float, N: int) -> List[Tuple[float, ...]]:
@@ -286,7 +268,7 @@ def plot_ternary_diagram(
     plt.text(
         0.05,
         0.95,  # Relative coordinates
-        f"Characteristic Function (μ):\n{mu_text}",
+        f"Payoff X:\n{mu_text}",
         transform=plt.gca().transAxes,
         fontsize=10,
         verticalalignment="top",
@@ -333,18 +315,18 @@ def plot_ternary_diagram(
 
 def main():
     N = 3
-    eta = 10  # Risk aversion parameter (you can adjust this)
+    eta = 7  # Risk aversion parameter (you can adjust this)
     grid_step_size = 0.005  # Adjust the step size for the grid (smaller step size for finer grid)
 
     # Define the characteristic function mu with (mean, variance) for each coalition
     mu = {
-        frozenset({1}): (1.0, 0.0),  # Singleton coalitions have zero variance
-        frozenset({2}): (3.0, 0.0),
-        frozenset({3}): (5.0, 0.0),
-        frozenset({1, 2}): (4.0, 1.0),
-        frozenset({1, 3}): (6.0, 1.5),
-        frozenset({2, 3}): (5.0, 2.0),
-        frozenset({1, 2, 3}): (15.0, 3.0),
+        frozenset({1}): (4.0, 4.0),
+        frozenset({2}): (4.0, 4.0),
+        frozenset({3}): (4.0, 4.0),
+        frozenset({1, 2}): (10.0, 7.0),
+        frozenset({1, 3}): (10.0, 7.0),
+        frozenset({2, 3}): (10.0, 7.0),
+        frozenset({1, 2, 3}): (20.0, 4.0),
     }
 
     # Generate the simplex grid for the grand coalition sharing rules
@@ -375,17 +357,17 @@ def main():
 
 
 def single_check():
-    eta = 1.0
+    eta = 10.0
     mu = {
         frozenset({1}): (1.0, 0.0),  # Singleton coalitions have zero variance
         frozenset({2}): (3.0, 0.0),
         frozenset({3}): (5.0, 0.0),
-        frozenset({1, 2}): (5.0, 1.0),
-        frozenset({1, 3}): (6.0, 1.5),
+        frozenset({1, 2}): (10.0, 6.0),
+        frozenset({1, 3}): (10.0, 1.5),
         frozenset({2, 3}): (5.0, 2.0),
-        frozenset({1, 2, 3}): (15.0, 3.0),
+        frozenset({1, 2, 3}): (15.0, 2.0),
     }
-    grand_sharing_rule = {1: 0.11, 2: 0.21, 3: 0.68}
+    grand_sharing_rule = {1: 0.12, 2: 0.36, 3: 0.52}
     is_grand_coalition_stable(3, eta, mu, grand_sharing_rule)
 
 
