@@ -19,7 +19,7 @@ def generate_coalitions(players: List[int]) -> List[FrozenSet[int]]:
 def mean_variance_utility(alpha: float, mu: float, sigma2: float, eta: float) -> float:
     if (mu == 0) or (alpha == 0):
         return -10000000
-    return (alpha * mu) ** (1 - eta) / (1 - eta) - (eta / 2) * (alpha**2) * sigma2 * (alpha * mu) ** (-1 - eta)
+    return ((alpha * mu) ** (1 - eta) - 1) / (1 - eta) - (eta / 2) * (alpha**2) * sigma2 * (alpha * mu) ** (-1 - eta)
 
 
 def calculate_utilities(

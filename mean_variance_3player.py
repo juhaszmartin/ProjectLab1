@@ -23,7 +23,7 @@ def mean_variance_utility(alpha: float, mu: float, sigma2: float, eta: float) ->
     """
     if (mu == 0) or (alpha == 0):
         return -10000000
-    return (alpha * mu) ** (1 - eta) / (1 - eta) - (eta / 2) * (alpha**2) * sigma2 * (alpha * mu) ** (-1 - eta)
+    return ((alpha * mu) ** (1 - eta) - 1) / (1 - eta) - (eta / 2) * (alpha**2) * sigma2 * (alpha * mu) ** (-1 - eta)
 
 
 def calculate_utilities(
@@ -357,20 +357,21 @@ def main():
 
 
 def single_check():
-    eta = 10.0
+    eta = 2.0
     mu = {
-        frozenset({1}): (1.0, 0.0),  # Singleton coalitions have zero variance
-        frozenset({2}): (3.0, 0.0),
-        frozenset({3}): (5.0, 0.0),
+        frozenset({1}): (4.0, 2.0),
+        frozenset({2}): (4.0, 2.0),
+        frozenset({3}): (4.0, 2.0),
         frozenset({1, 2}): (10.0, 6.0),
-        frozenset({1, 3}): (10.0, 1.5),
-        frozenset({2, 3}): (5.0, 2.0),
-        frozenset({1, 2, 3}): (15.0, 2.0),
+        frozenset({1, 3}): (8.0, 5.0),
+        frozenset({2, 3}): (9.0, 7.0),
+        frozenset({1, 2, 3}): (15.0, 8.0),
     }
-    grand_sharing_rule = {1: 0.12, 2: 0.36, 3: 0.52}
+    grand_sharing_rule = {1: 0.3, 2: 0.3, 3: 0.4}
     is_grand_coalition_stable(3, eta, mu, grand_sharing_rule)
 
 
 if __name__ == "__main__":
-    main()
+    # main()
     # single_check()
+    print(mean_variance_utility(0.5, 2, 1, 2))
