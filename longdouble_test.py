@@ -8,12 +8,7 @@ from matplotlib.gridspec import GridSpec
 from scipy.optimize import brentq
 from matplotlib.colors import LinearSegmentedColormap
 
-
-# Check if np.longdouble has more bits than np.float64
-if np.finfo(np.longdouble).eps < np.finfo(np.float64).eps:
-    float_type = np.longdouble
-else:
-    float_type = np.float64
+float_type = np.longdouble
 
 
 def generate_coalitions(players: List[int]) -> List[FrozenSet[int]]:
